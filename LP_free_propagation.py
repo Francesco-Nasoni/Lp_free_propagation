@@ -13,18 +13,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # -------------------------------------------------------------------------------------------------
 # NOTE: all the length are measured in units of fiber radius
 
-SUPERVISION_MODE = False
-N_THREADS = 16
+SUPERVISION_MODE = True
+N_THREADS = 14
 
 # --- Various Parameters ---
-FIBER_V = 5.8
-DIST_FROM_FIBER = np.arange(0, 800, 1)
-RZ_FACTOR = 1.25
+FIBER_V = 5.8                               # V number of the fiber, must be the same used in the filed generation
+DIST_FROM_FIBER = np.arange(0, 30, 0.1)     # Array of propagation distances from fiber end
+RZ_FACTOR = 0.9                             # Scaling factor of the calculated space for ASM propagation
 LAMBDA = 0.0443
 
 # --- Grid stuff ---
 AXIS_SIZE = 1.3
-MIN_DX_PROPAGATED_FIELD = 1/12
+MIN_DX_PROPAGATED_FIELD = 1/24              # Minimal spatial resolution required for ASM propagation
+MIN_NX_PRPPAGETED_FIELD = 100               # Minimal number of grid points for the propagated field        
 
 # --- Visualization stuff ---
 CMAP = plt.get_cmap("gnuplot2", 20)
@@ -73,33 +74,34 @@ def process_propagation(Z_dist):
         RZ_FACTOR,
         MIN_DX_PROPAGATED_FIELD,
         FIBER_V,
-        axis_ext,
+        1.3*axis_ext,
+        min_Nx= MIN_NX_PRPPAGETED_FIELD,
         min_point_per_period=10,
         radius=radius,
         lambda_0=LAMBDA,
     )
     
+    intensity = np.abs(E_propagated_x) ** 2 + np.abs(E_propagated_y) ** 2
+
     if not SUPERVISION_MODE:
         np.savez(
             output_folder / f"propagated_field_z{Z_dist}.npz",
-            E_propagated_x=E_propagated_x,
-            E_propagated_y=E_propagated_y,
+            intensity = intensity,
             dist_from_fiber=Z_dist,
             axis_ext=prop_axis_ext,
             fiber_radius=radius,
             lambda_0=LAMBDA,
         )
     
-    return E_propagated_x, E_propagated_y, prop_axis_ext
+    return intensity, prop_axis_ext
 
 
 if SUPERVISION_MODE:
     # Sequential execution for visualization in supervision mode
     for Z_dist in tqdm(DIST_FROM_FIBER, desc="Propagating field"):
-        E_propagated_x, E_propagated_y, prop_axis_ext = process_propagation(Z_dist)
 
-        I_propagated = np.abs(E_propagated_x) ** 2 + np.abs(E_propagated_y) ** 2
-        
+        I_propagated, prop_axis_ext = process_propagation(Z_dist)
+
         if Z_dist == DIST_FROM_FIBER[0]:
             plt.figure(figsize=(10, 8))
             im = plt.imshow(

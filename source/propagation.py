@@ -39,6 +39,7 @@ def free_propagation_asm_hankel(
     min_dx,
     fiber_V,
     R_origin,
+    min_Nx=0,
     min_point_per_period=10,
     radius=1.0,
     lambda_0=1.0,
@@ -120,8 +121,8 @@ def free_propagation_asm_hankel(
         return np.sqrt(total_norm_sq)
 
     # Coordinates in position space
-    R_z = NA * z
-    R_z = max(R_origin, R_z) * Rz_factor
+    R_z = (NA * z + radius) *Rz_factor
+    R_z = max(R_origin, R_z)
 
     # --- DYNAMIC GRID CALCULATION ---
     # Nyquist criterion: dx < lambda / (2 * NA), we use an oversampling factor of 4
@@ -130,7 +131,7 @@ def free_propagation_asm_hankel(
     min_Nx_nyquist = int(np.ceil((2 * R_z) / nyquist_dx))
     min_Nx_required = int(np.ceil((2 * R_z) / min_dx))
 
-    N_x_eff = max(min_Nx_nyquist, min_Nx_required)
+    N_x_eff = max(min_Nx_nyquist, min_Nx_required, min_Nx)
     
 
     x = np.linspace(-R_z, R_z, N_x_eff)
