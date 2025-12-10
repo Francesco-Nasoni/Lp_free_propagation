@@ -18,14 +18,14 @@ N_THREADS = 14
 
 # --- Various Parameters ---
 FIBER_V = 5.8                               # V number of the fiber, must be the same used in the filed generation
-DIST_FROM_FIBER = np.arange(0, 30, 0.1)     # Array of propagation distances from fiber end
-RZ_FACTOR = 0.9                             # Scaling factor of the calculated space for ASM propagation
+DIST_FROM_FIBER = np.arange(0, 100, 1)      # Array of propagation distances from fiber end
+RZ_FACTOR = 0.8                             # Scaling factor of the calculated space for ASM propagation
 LAMBDA = 0.0443
 
 # --- Grid stuff ---
 AXIS_SIZE = 1.3
-MIN_DX_PROPAGATED_FIELD = 1/24              # Minimal spatial resolution required for ASM propagation
-MIN_NX_PRPPAGETED_FIELD = 100               # Minimal number of grid points for the propagated field        
+MIN_DX_PROPAGATED_FIELD = 1/24            # Minimal spatial resolution required for ASM propagation
+MIN_NX_PRPPAGETED_FIELD = 0               # Minimal number of grid points for the propagated field        
 
 # --- Visualization stuff ---
 CMAP = plt.get_cmap("gnuplot2", 20)
@@ -97,6 +97,13 @@ def process_propagation(Z_dist):
 
 
 if SUPERVISION_MODE:
+
+    # References for resolution
+    print("*"*50)
+    print(f"Characteristic length on the x,y directions: Lx = {LAMBDA/NA:.3f}\t currently using: δx = {MIN_DX_PROPAGATED_FIELD:.3f}")
+    print(f"Characteristic length on the z direction   : Lz = {2*LAMBDA/(NA**2):.3f}\t currently using: δz = {DIST_FROM_FIBER[1]- DIST_FROM_FIBER[0]:.3f}")
+    print("*"*50, "\n")
+
     # Sequential execution for visualization in supervision mode
     for Z_dist in tqdm(DIST_FROM_FIBER, desc="Propagating field"):
 

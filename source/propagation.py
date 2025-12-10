@@ -121,7 +121,7 @@ def free_propagation_asm_hankel(
         return np.sqrt(total_norm_sq)
 
     # Coordinates in position space
-    R_z = (NA * z + radius) *Rz_factor
+    R_z = (NA * z + radius) * Rz_factor
     R_z = max(R_origin, R_z)
 
     # --- DYNAMIC GRID CALCULATION ---
@@ -133,7 +133,6 @@ def free_propagation_asm_hankel(
 
     N_x_eff = max(min_Nx_nyquist, min_Nx_required, min_Nx)
     
-
     x = np.linspace(-R_z, R_z, N_x_eff)
     y = np.linspace(-R_z, R_z, N_x_eff)
     X, Y = np.meshgrid(x, y)

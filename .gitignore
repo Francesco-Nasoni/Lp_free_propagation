@@ -2,3 +2,4 @@ __pycache__
 output
 guided_modes.npy
 propagate_field_coeff.csv
+pitch_incidence.py
