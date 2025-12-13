@@ -3,3 +3,7 @@ output
 guided_modes.npy
 propagate_field_coeff.csv
 pitch_incidence.py
+
+2_propagated_field_z1.npz
+propagated_field_z1.npz
+prova.py

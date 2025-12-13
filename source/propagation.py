@@ -30,16 +30,42 @@ def fiber_propagation(df_coeff, n1, a, lam, z_fiber):
     return df.drop(columns=["beta_lm", "phase_fact"])
 
 
+def verify_resolution(
+    dx,
+    dz,
+    lambda_0,
+    NA,
+    oversampling_factor_x,
+    oversampling_factor_z,
+):
+    
+    nyquist_dx = lambda_0 / (2 * NA * oversampling_factor_x)
+
+    if dx > nyquist_dx:
+        raise ValueError(
+            f"Resolution dx={dx:.2e} exceeds Nyquist limit with required oversampling {nyquist_dx:.2e}.\n"
+            f"Required dx <= lambda_0 / (2 * NA * oversampling_factor))"
+        )
+
+    nyquist_dz = lambda_0 / (oversampling_factor_z * NA**2)
+
+    if dz > nyquist_dz:
+        raise ValueError(
+            f"Resolution dz={dz:.2e} exceeds Nyquist limit with required oversampling {nyquist_dz:.2e}.\n"
+            f"Required dz <= lambda_0 / (oversampling_factor * NA^2)"
+        )
+
+
 def free_propagation_asm_hankel(
     guided_modes,
     df_coeff,
     z,
     NA,
     Rz_factor,
-    min_dx,
+    dx,
+    k_max_factor,
     fiber_V,
     R_origin,
-    min_Nx=0,
     min_point_per_period=10,
     radius=1.0,
     lambda_0=1.0,
@@ -65,7 +91,7 @@ def free_propagation_asm_hankel(
         Returns:
             tuple: (E_final_x, E_final_y, R_z) - Complex field arrays and grid radius
     """
-    
+
     def analytical_hankel_core(l, u, a, k):
         """
         Analytical Hankel Transform of the Core field (J_l) from 0 to a.
@@ -79,8 +105,7 @@ def free_propagation_asm_hankel(
 
         # Formula: (a / (h^2-k^2)) * [ u*J_{l+1}(ha)*J_l(ka) - k*J_l(ha)*J_{l+1}(ka) ]
         term = (a / denom) * (
-            h * jv(l + 1, u) * jv(l, k * a)
-            - k * jv(l, u) * jv(l + 1, k * a)
+            h * jv(l + 1, u) * jv(l, k * a) - k * jv(l, u) * jv(l + 1, k * a)
         )
         return term
 
@@ -96,8 +121,7 @@ def free_propagation_asm_hankel(
 
         # Formula: (a / (w^2+k^2)) * [ w/a * J_l(ka) * K_{l+1}(w) - k * J_{l+1}(ka) * K_l(w) ]
         term = (a / denom) * (
-            q * jv(l, k * a) * kn(l + 1, w)
-            - k * jv(l + 1, k * a) * kn(l, w)
+            q * jv(l, k * a) * kn(l + 1, w) - k * jv(l + 1, k * a) * kn(l, w)
         )
         return term
 
@@ -124,17 +148,12 @@ def free_propagation_asm_hankel(
     R_z = (NA * z + radius) * Rz_factor
     R_z = max(R_origin, R_z)
 
-    # --- DYNAMIC GRID CALCULATION ---
-    # Nyquist criterion: dx < lambda / (2 * NA), we use an oversampling factor of 4
-    oversampling = 4.0 
-    nyquist_dx = lambda_0 / (2 * NA * oversampling)
-    min_Nx_nyquist = int(np.ceil((2 * R_z) / nyquist_dx))
-    min_Nx_required = int(np.ceil((2 * R_z) / min_dx))
+    # --- GRID CALCULATION ---
 
-    N_x_eff = max(min_Nx_nyquist, min_Nx_required, min_Nx)
-    
-    x = np.linspace(-R_z, R_z, N_x_eff)
-    y = np.linspace(-R_z, R_z, N_x_eff)
+    Nx = int(np.ceil((2 * R_z) / dx))
+
+    x = np.linspace(-R_z, R_z, Nx)
+    y = np.linspace(-R_z, R_z, Nx)
     X, Y = np.meshgrid(x, y)
     R = np.sqrt(X**2 + Y**2)
     PHI = np.arctan2(Y, X)
@@ -142,16 +161,14 @@ def free_propagation_asm_hankel(
     # Coordinate in k_space
     # Since we are not using fft we can use as many point as we want
     k0 = 2 * np.pi / lambda_0
-    k_max = max(
-        k0 * 4 * NA, 10 / radius
-    )
+    k_max = max(k0 * k_max_factor, 10 / radius)
 
     # * Calculating N_k to have {min_point_per_period} point per period for k_max
-    # Asymptotic J_l(ax) ~ cos (ax + φ) -> λ=2π/a
+    # Asymptotic J_l(ax) ~ cos(ax + φ) -> λ=2π/a
     # Max period when calculating Hankel transform
     #   R_max = R_z * √2  (accounting for the corners)
-    #   λ_max = 2π/R_max
-    #   Δx =  λ_max/min_point_per_period = 2π/R_max/min_point_per_period
+    #   λ_min = 2π/R_max
+    #   Δx =  λ_min/min_point_per_period = 2π/R_max/min_point_per_period
     #   N_k = (k_max / Δx)
 
     N_k = int(np.ceil(k_max / (2 * np.pi / R_z / np.sqrt(2) / min_point_per_period)))
@@ -168,7 +185,7 @@ def free_propagation_asm_hankel(
     E_final_y = np.zeros_like(R, dtype=complex)
 
     # Pre-compute a 1D radial axis for interpolation (speed optimization)
-    r_1d = np.linspace(0, R_z * np.sqrt(2), N_x_eff)
+    r_1d = np.linspace(0, R_z * np.sqrt(2), Nx)
 
     for mode in guided_modes:
         if mode is None:
@@ -184,24 +201,24 @@ def free_propagation_asm_hankel(
         B = jv(l, u) / kn(l, w)
         norm_factor = get_normalization_factor(l, u, w, radius)
 
-        # Analytically computed Hankel transform in the core and in the clad
-        F_core = analytical_hankel_core(l, u, radius, k_grid)
-        F_clad = analytical_hankel_cladding(l, w, radius, k_grid)
+        #* Analytically computed Hankel transform in the core and in the clad
+        H_core = analytical_hankel_core(l, u, radius, k_grid)
+        H_clad = analytical_hankel_cladding(l, w, radius, k_grid)
 
         # Total Hankel transform F_k
-        F_k = F_core + B * F_clad
+        H_k = H_core + B * H_clad
 
-        F_k /= norm_factor
+        H_k /= norm_factor
 
-        # Application of the propagator
-        F_k_prop = F_k * propagator
+        #* Application of the propagator
+        H_k_prop = H_k * propagator
 
-        # Numerical inverse Hankel function
+        #* Numerical inverse Hankel function
         # f(r, z) = Integral [ F(k) * J_l(kr) * k dk ]
 
         # Compute the integrand and integrate through simpson
         bessel_term = jv(l, k_grid[None, :] * r_1d[:, None])
-        integrand = F_k_prop[None, :] * bessel_term * k_grid[None, :]
+        integrand = H_k_prop[None, :] * bessel_term * k_grid[None, :]
         f_r_prop = simpson(integrand, x=k_grid, axis=1)
 
         # Interpolation
