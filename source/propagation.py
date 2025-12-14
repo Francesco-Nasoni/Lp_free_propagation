@@ -257,6 +257,7 @@ def free_propagation_asm_hankel(
                 coeffs["y_p_phi"] * ang_p + coeffs["y_m_phi"] * ang_m
             )
 
+    if return_z_gradient:
         return E_final_x, E_final_y, dEx_dz, dEy_dz, R_z
 
     return E_final_x, E_final_y, R_z

@@ -50,7 +50,7 @@ axis_ext = AXIS_SIZE * radius
 K_MAX_FACTOR = 2
 
 # --- Load guided modes from files ---
-guided_modes = np.load("guided_modes.npy", allow_pickle="True")
+guided_modes = np.load("guided_modes.npy", allow_pickle=True)
 df_coeff_fib_prop = pd.read_csv(
     "propagate_field_coeff.csv",
     dtype={0: float, 1: float, 2: float},
