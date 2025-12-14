@@ -38,7 +38,7 @@ def verify_resolution(
     oversampling_factor_x,
     oversampling_factor_z,
 ):
-    
+
     nyquist_dx = lambda_0 / (2 * NA * oversampling_factor_x)
 
     if dx > nyquist_dx:
@@ -69,6 +69,7 @@ def free_propagation_asm_hankel(
     min_point_per_period=10,
     radius=1.0,
     lambda_0=1.0,
+    return_z_gradient=False,
 ):
     """
     Propagate guided fiber modes using analytical Hankel transforms and ASM.
@@ -180,9 +181,15 @@ def free_propagation_asm_hankel(
     kz = np.sqrt(kz_sq)
     propagator = np.exp(1j * kz * z)
 
-    # --- 4. Accumulate Fields ---
+    if return_z_gradient:
+        dz_factor = 1j * kz
+
+    # --- 4. Accumulate Field and Derivative---
     E_final_x = np.zeros_like(R, dtype=complex)
     E_final_y = np.zeros_like(R, dtype=complex)
+
+    dEx_dz = np.zeros_like(R, dtype=complex) if return_z_gradient else None
+    dEy_dz = np.zeros_like(R, dtype=complex) if return_z_gradient else None
 
     # Pre-compute a 1D radial axis for interpolation (speed optimization)
     r_1d = np.linspace(0, R_z * np.sqrt(2), Nx)
@@ -201,7 +208,7 @@ def free_propagation_asm_hankel(
         B = jv(l, u) / kn(l, w)
         norm_factor = get_normalization_factor(l, u, w, radius)
 
-        #* Analytically computed Hankel transform in the core and in the clad
+        # * Analytically computed Hankel transform in the core and in the clad
         H_core = analytical_hankel_core(l, u, radius, k_grid)
         H_clad = analytical_hankel_cladding(l, w, radius, k_grid)
 
@@ -210,10 +217,10 @@ def free_propagation_asm_hankel(
 
         H_k /= norm_factor
 
-        #* Application of the propagator
+        # * Application of the propagator
         H_k_prop = H_k * propagator
 
-        #* Numerical inverse Hankel function
+        # * Numerical inverse Hankel function
         # f(r, z) = Integral [ F(k) * J_l(kr) * k dk ]
 
         # Compute the integrand and integrate through simpson
@@ -223,6 +230,12 @@ def free_propagation_asm_hankel(
 
         # Interpolation
         field_envelope = np.interp(R, r_1d, f_r_prop)
+
+        # Integrate the gradient if required
+        if return_z_gradient:
+            integrand_dz = integrand * dz_factor[None, :]
+            f_r_prop_dz = simpson(integrand_dz, x=k_grid, axis=1)
+            field_envelope_dz = np.interp(R, r_1d, f_r_prop_dz)
 
         # --- Reconstruct Angular Dependence & Polarization ---
         ang_p = np.exp(1j * l * PHI)
@@ -235,5 +248,15 @@ def free_propagation_asm_hankel(
         E_final_y += field_envelope * (
             coeffs["y_p_phi"] * ang_p + coeffs["y_m_phi"] * ang_m
         )
+
+        if return_z_gradient:
+            dEx_dz += field_envelope_dz * (
+                coeffs["x_p_phi"] * ang_p + coeffs["x_m_phi"] * ang_m
+            )
+            dEy_dz += field_envelope_dz * (
+                coeffs["y_p_phi"] * ang_p + coeffs["y_m_phi"] * ang_m
+            )
+
+        return E_final_x, E_final_y, dEx_dz, dEy_dz, R_z
 
     return E_final_x, E_final_y, R_z

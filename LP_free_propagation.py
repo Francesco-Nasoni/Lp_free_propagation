@@ -18,7 +18,7 @@ N_THREADS = 14
 
 # --- Various Parameters ---
 FIBER_V = 5.8  # V number of the fiber, must be the same used in the filed generation
-DIST_FROM_FIBER = np.arange(0, 2, 1)  # Array of propagation distances from fiber end
+DIST_FROM_FIBER = np.arange(0, 1000, 5)  # Array of propagation distances from fiber end
 RZ_FACTOR = 0.8  # Scaling factor of the calculated space for ASM propagation
 LAMBDA = 0.0443
 
@@ -69,7 +69,7 @@ def process_propagation(Z_dist):
     Process propagation for a single distance.
     The function is designed to be passed to each worker in a parallel execution context.
     """
-    E_propagated_x, E_propagated_y, prop_axis_ext = free_propagation_asm_hankel(
+    E_propagated_x, E_propagated_y, dEx_dz, dEy_dz, prop_axis_ext = free_propagation_asm_hankel(
         guided_modes,
         df_coeff_fib_prop,
         Z_dist,
@@ -82,14 +82,21 @@ def process_propagation(Z_dist):
         min_point_per_period=10,
         radius=radius,
         lambda_0=LAMBDA,
+        return_z_gradient=True
     )
 
     intensity = np.abs(E_propagated_x) ** 2 + np.abs(E_propagated_y) ** 2
 
+    Nx = E_propagated_x.shape[0]
+    dx_local = (2 * prop_axis_ext) / (Nx - 1)
+    grad_I_y, grad_I_x = np.gradient(intensity, dx_local)
+
+    grad_I_z = 2 * np.real(E_propagated_x * np.conj(dEx_dz) + E_propagated_y * np.conj(dEy_dz))
+
     if not SUPERVISION_MODE:
         np.savez(
-            output_folder / f"propagated_field_z{Z_dist}.npz",
-            intensity=intensity,
+            output_folder / f"intensity_gradient_z{Z_dist}.npz",
+            grad_I=(grad_I_x, grad_I_y, grad_I_z),
             dist_from_fiber=Z_dist,
             axis_ext=prop_axis_ext,
             fiber_radius=radius,
